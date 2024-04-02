@@ -73,6 +73,10 @@ char username[20];
     close(sockfd);
 }*/
 
+void *privateChat(void *arg){
+    
+}
+
 void getChats(int type){
     // fake chats
     for (int i = 0; i < 10; i++){
@@ -176,6 +180,9 @@ void vida(){
                 
                 break;
             case 2:
+                getUsers();
+                int choose = chooseUser(users, numUsers);
+
                 getChats(2);
 
                 while (strcmp(msg, "exit") != 0) {
