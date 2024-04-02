@@ -28,14 +28,28 @@ UserInfo *users[50];
 MessageCommunication *chats[50];
 UserInfo *user[75];
 
+pthread_mutex_t mutex;
+
 int option = 0;
 int numChats = 0;
 int numUsers = 0;
 char *msg;
 
+int sockfd;
+
 char username[20];
 
-/*void createSocket(char *username, char *ip, char *port) {
+
+void createSocket(char *user, char *ip, char *port) {
+   
+    // Verificar que el nombre de usuario y la IP no sean iguales
+    if (strcmp(user, ip) == 0) {
+        fprintf(stderr, "El nombre de usuario y la dirección IP no pueden ser iguales\n");
+        return;
+    }
+
+    char *tempIP = ip;
+
     // Crear socket
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) {
@@ -47,34 +61,59 @@ char username[20];
     struct sockaddr_in server;
     server.sin_family = AF_INET;
     server.sin_port = htons(atoi(port));
+     
     server.sin_addr.s_addr = inet_addr(ip);
-
+    
+    
     if (connect(sockfd, (struct sockaddr *)&server, sizeof(server)) < 0) {
         perror("Error al conectar al servidor");
         exit(1);
     }
+    
+    int option = 1;
 
-    // Enviar nombre de usuario al servidor
-    if (send(sockfd, username, strlen(username), 0) < 0) {
-        perror("Error al enviar el nombre de usuario");
+    printf("Registrando usuario %s\n", user);
+
+    if (send(sockfd, &option, sizeof(int), 0) < 0) {
+        perror("Error al enviar la opción de registro");
         exit(1);
     }
 
-    // Recibir mensaje de bienvenida del servidor
+    
+    // Crear un buffer con el nombre de usuario y la dirección IP separados por un delimitador
     char buffer[1024];
-    if (recv(sockfd, buffer, 1024, 0) < 0) {
-        perror("Error al recibir el mensaje de bienvenida");
+    sprintf(buffer, "%s|%s", user, ip);
+
+    // Enviar el buffer
+    if (send(sockfd, buffer, strlen(buffer), 0) < 0) {
+        perror("Error al enviar el nombre de usuario y la dirección IP");
         exit(1);
     }
-
-    printf("%s\n", buffer);
 
     // Cerrar el socket
     close(sockfd);
-}*/
+}
+
 
 void *privateChat(void *arg){
+    int userChoice = *(int *)arg;
+
+    UserInfo *selected = users[userChoice];
+
+    printf("Chat privado con %s\n", selected->username);
+
+    getChats(2);
+
+    pthread_mutex_lock(&mutex);
+    while (strcmp(msg, "exit") != 0) {
+        chat(chats, numChats);
+        msg = pushChat();
+        updateChats(msg,2);
+    }
+
+    pthread_mutex_unlock(&mutex);
     
+    pthread_exit(NULL);
 }
 
 void getChats(int type){
@@ -147,11 +186,18 @@ void begginMain(){
             case 2:
                 //register
                 char * useRE = registerUser();
+
+                int op = 1;
+                if(send(sockfd,&op, sizeof(int), 0) < 0){
+                    perror("Error al enviar la opcion");
+                    exit(1);
+                }
                 strcpy(username, use);
 
                 break;
             case 3:
                 printf("Saliendo del chat\n");
+                system("clear");
                 break;
             default:
                 break;
@@ -164,6 +210,7 @@ void begginMain(){
 
 void vida(){
     msg = malloc(1024 * sizeof(char));
+    int choose;
     while(option != 7){
         option = menu();
 
@@ -181,15 +228,17 @@ void vida(){
                 break;
             case 2:
                 getUsers();
-                int choose = chooseUser(users, numUsers);
+                choose = chooseUser(users, numUsers);
 
-                getChats(2);
 
-                while (strcmp(msg, "exit") != 0) {
-                    chat(chats, numChats);
-                    msg = pushChat();
-                    updateChats(msg,2);
+                pthread_t threadId;
+
+                if(pthread_create(&threadId, NULL, privateChat, (void *)&choose) != 0){
+                    perror("Error al crear el hilo");
+                    exit(1);
                 }
+
+                
                 
 
                 break;
@@ -236,18 +285,24 @@ void vida(){
 
 int main (int argc, char *argv[]) {
     // recibir parametros de nombre de usuario, ip del servidor y puerto del servidor
-    /*if (argc != 3) {
+    if (argc != 4) {
         printf("Error: Debe ingresar 3 parametros\n");
         return 1;
     }
     
     char *username = argv[1];
     char *ip = argv[2];
-    char *port = argv[3];*/
+    char *port = argv[3];
 
-    //createSocket(username, ip, port);
+    printf("Usuario: %s\n", username);
+    printf("IP: %s\n", ip);
 
-    begginMain();
+    createSocket(username, ip, port);
+
+    //begginMain();
+    vida();
+
+    pthread_mutex_destroy(&mutex);
 
     return 0;
 
