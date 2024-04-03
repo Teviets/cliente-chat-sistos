@@ -1,3 +1,4 @@
+// Server
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,7 +35,7 @@ int server_socket, user_socket, port;
 struct sockaddr_in server_addr, user_addr;
 
 // Prototipos de funciones
-void handle_request(int user_socket, int option);
+void handle_request(int user_socket);
 void send_connected_users(int user_socket);
 //void ChangeStatus(char *username, char *status);
 void send_message(int user_socket, char *recipient, char *message_text);
@@ -43,7 +44,6 @@ void send_response(int user_socket, int option, int code, char *message);
 void show_connected_users_and_messages();
 void remove_user(int user_socket);
 
-// Función para manejar las conexiones de los usuarios
 void *handle_user(void *arg) {
     int user_socket = *((int *)arg);
     free(arg);
@@ -52,46 +52,66 @@ void *handle_user(void *arg) {
     int code = 0;
     char message[BUFFER_SIZE];
 
+    
+
     // Leer la opción del usuario
-    if (recv(user_socket, &option, sizeof(int), 0) <= 0) {
+    /*if (recv(user_socket, &option, sizeof(int), 0) <= 0) {
         perror("Error al recibir opción del usuario");
         close(user_socket);
         return NULL;
     }
-
+    printf("Nuevo usuario conectado: %d\n", option);*/
     // Manejar la solicitud del usuario
-    handle_request(user_socket, option);
+    handle_request(user_socket);
 
     // Cerrar la conexión y eliminar al usuario del servidor
     remove_user(user_socket);
-
+    
     close(user_socket);
-    return NULL;
+    pthread_exit(NULL); // Terminar el hilo aquí
 }
 
+
 // Función para manejar las solicitudes de los usuarios
-void handle_request(int user_socket, int option) {
+void handle_request(int user_socket) {
     int code;
     char message[BUFFER_SIZE];
+    printf("Nuevo usuario conectado: %d\n", user_socket);
+    ClientPetition client_petition;
+    //client_petition = (ClientPetition)malloc(sizeof(ClientPetition));
+    printf("Esperando petición del cliente...\n");
+    int size;
+    if (recv(user_socket, &size, sizeof(int), 0) != sizeof(int)) {
+        perror("Error al recibir el tamaño de la petición del cliente");
+        close(user_socket);
+        pthread_exit(NULL);
+    }
+    printf("Tamaño de la petición: %d\n", size);
+    if (recv(user_socket, &client_petition, size, 0) != size) {
+        perror("Error al recibir la petición del cliente");
+        close(user_socket);
+        pthread_exit(NULL);
+    }
 
-    switch (option) {
+
+    printf("Petición recibida: %d\n", client_petition.option);
+    printf("Usuario: %s\n", client_petition.registration.username);
+    printf("IP: %s\n", client_petition.registration.ip);
+    printf("Usuarios: %s\n", client_petition.users.user);
+    printf("Cambio de estado: %s\n", client_petition.change.username);
+    printf("Mensaje: %s\n", client_petition.messageCommunication.message);
+    printf("Destinatario: %s\n", client_petition.messageCommunication.recipient);
+    printf("Remitente: %s\n", client_petition.messageCommunication.sender);
+    switch (client_petition.option) {
         case 1: // Registro de Usuarios
             {
-                // Recibir los datos de registro del usuario
-                UserRegistration registration;
-                if (recv(user_socket, &registration, sizeof(UserRegistration), 0) <= 0) {
-                    perror("Error al recibir datos de registro del usuario");
-                    close(user_socket);
-                    pthread_exit(NULL);
-                }
-
-                printf("Usuario registrado: %s\n", registration.username);
-                printf("IP: %s\n", registration.ip);
-
-                // Llamar a la función UserRegistration con la estructura UserRegistration recibida
-                UserRegistration1(user_socket, registration.username, registration.ip);
+                printf("Petición de registro de usuario\n");
+                printf("Usuario: %s\n", client_petition.registration.username);
+                UserRegistration1(user_socket, client_petition.registration.username);
+                printf("Usuario registrado\n");
             }
             break;
+
 
         case 2: // Usuarios Conectados
             {
@@ -138,9 +158,10 @@ void handle_request(int user_socket, int option) {
             // Opción no válida
             code = 500;
             sprintf(message, "Error: Opción inválida");
-            send_response(user_socket, option, code, message);
+            send_response(user_socket, client_petition.option, code, message);
             break;
     }
+    //free(client_petition);
 }
 
 // Función para enviar la lista de usuarios conectados al usuario
@@ -243,15 +264,16 @@ void remove_user(int user_socket) {
     pthread_mutex_unlock(&server.mutex);
 }
 
-void UserRegistration1(int user_socket, char *username, char *ip) {
+void UserRegistration1(int user_socket, char *username) {
     int code;
     char message[BUFFER_SIZE];
-
+    
     // Bloquear el acceso a la estructura del servidor para evitar condiciones de carrera
     pthread_mutex_lock(&server.mutex);
-
+    
     // Verificar si el usuario ya está registrado
     int i;
+    
     for (i = 0; i < server.user_count; i++) {
         if (strcmp(server.users[i].username, username) == 0) {
             code = 500; // Usuario ya registrado
@@ -261,14 +283,15 @@ void UserRegistration1(int user_socket, char *username, char *ip) {
             
         }
     }
+    
 
     // Registrar al nuevo usuario
-    strcpy(server.users[server.user_count].username, username);
-    strcpy(server.users[server.user_count].ip, ip);
-    strcpy(server.users[server.user_count].status, "ACTIVO");
-    server.users[server.user_count].socket = user_socket;
-    server.user_count++;
+    
+    User newUser = {user_socket, username, "127.0.0.1", "ACTIVO"};
 
+    server.users[server.user_count++] = newUser;
+    server.users[server.user_count].socket = user_socket;
+    
     // Enviar respuesta exitosa al usuario
     code = 200;
     sprintf(message, "Usuario '%s' registrado correctamente", username);
@@ -285,6 +308,7 @@ void UserRegistration1(int user_socket, char *username, char *ip) {
     show_connected_users_and_messages();
 
     pthread_mutex_unlock(&server.mutex);
+    
 }
 
 int main(int argc, char *argv[]) {
@@ -344,6 +368,7 @@ int main(int argc, char *argv[]) {
             exit(EXIT_FAILURE);
         }
     }
+
 
     close(server_socket);
     pthread_mutex_destroy(&server.mutex);

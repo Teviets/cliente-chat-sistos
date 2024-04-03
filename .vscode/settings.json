@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "*.inc": "cpp",
+        "vista.h": "c",
+        "protocol.h": "c",
+        "stdlib.h": "c",
+        "wait.h": "c",
+        "errno.h": "c"
+    }
+}
