@@ -41,15 +41,6 @@ char username[20];
 
 
 void createSocket(char *user, char *ip, char *port) {
-   
-    // Verificar que el nombre de usuario y la IP no sean iguales
-    if (strcmp(user, ip) == 0) {
-        fprintf(stderr, "El nombre de usuario y la dirección IP no pueden ser iguales\n");
-        return;
-    }
-
-    char *tempIP = ip;
-
     // Crear socket
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) {
@@ -61,38 +52,32 @@ void createSocket(char *user, char *ip, char *port) {
     struct sockaddr_in server;
     server.sin_family = AF_INET;
     server.sin_port = htons(atoi(port));
-     
     server.sin_addr.s_addr = inet_addr(ip);
-    
-    
+
     if (connect(sockfd, (struct sockaddr *)&server, sizeof(server)) < 0) {
         perror("Error al conectar al servidor");
         exit(1);
     }
-    
-    int option = 1;
 
-    printf("Registrando usuario %s\n", user);
+    // Preparar la estructura UserRegistration
+    UserRegistration registration;
+    registration.username = user;
+    registration.ip = ip;
 
-    if (send(sockfd, &option, sizeof(int), 0) < 0) {
-        perror("Error al enviar la opción de registro");
-        exit(1);
-    }
+    // Enviar la estructura UserRegistration al servidor
+    ClientPetition request;
+    request.option = 1; // Registro de Usuarios
+    request.registration = registration;
 
-    
-    // Crear un buffer con el nombre de usuario y la dirección IP separados por un delimitador
-    char buffer[1024];
-    sprintf(buffer, "%s|%s", user, ip);
-
-    // Enviar el buffer
-    if (send(sockfd, buffer, strlen(buffer), 0) < 0) {
-        perror("Error al enviar el nombre de usuario y la dirección IP");
+    if (send(sockfd, &request, sizeof(ClientPetition), 0) < 0) {
+        perror("Error al enviar la solicitud de registro de usuario");
         exit(1);
     }
 
     // Cerrar el socket
     close(sockfd);
 }
+
 
 
 void *privateChat(void *arg){
@@ -155,6 +140,17 @@ void getUsers(){
     
 }
 
+void requestUsers(int sockfd){
+    ClientPetition request;
+
+    request.option = 2;
+
+    if (send(sockfd, &request, sizeof(ClientPetition), 0) < 0) {
+        perror("Error al enviar la solicitud de usuarios");
+        exit(1);
+    }
+}
+
 
 void updateChats(char *msg, int type) {
     MessageCommunication *chat = malloc(sizeof(MessageCommunication));
@@ -168,45 +164,16 @@ void updateChats(char *msg, int type) {
     chats[numChats++] = chat;
 }
 
-void begginMain(){
-    int op = 0;
-    while (op != 3){
-        op = beggin();
-        switch (op)
-        {
-            case 1:
-                //login
-                char * use = login();
-                strcpy(username, use);
-                // check User
-                // if user exists
-                vida();
+void requestChat(int sockfd){
+    ClientPetition request;
 
-                break;
-            case 2:
-                //register
-                char * useRE = registerUser();
+    request.option = 2;
 
-                int op = 1;
-                if(send(sockfd,&op, sizeof(int), 0) < 0){
-                    perror("Error al enviar la opcion");
-                    exit(1);
-                }
-                strcpy(username, use);
-
-                break;
-            case 3:
-                printf("Saliendo del chat\n");
-                system("clear");
-                break;
-            default:
-                break;
-        }
+    if (send(sockfd, &request, sizeof(ClientPetition), 0) < 0) {
+        perror("Error al enviar la solicitud de chat");
+        exit(1);
     }
-    
 }
-
-
 
 void vida(){
     msg = malloc(1024 * sizeof(char));
@@ -219,6 +186,7 @@ void vida(){
             case 1:
                 
                 getChats(1);
+                //requestChat(sockfd);
                 while (strcmp(msg, "exit") != 0) {
                     chat(chats, numChats);
                     msg = pushChat();
@@ -281,6 +249,43 @@ void vida(){
     }
 }
 
+void begginMain(){
+    int op = 0;
+    while (op != 3){
+        op = beggin();
+        switch (op)
+        {
+            case 1:
+                //login
+                char * use = login();
+                strcpy(username, use);
+                // check User
+                // if user exists
+                vida();
+
+                break;
+            case 2:
+                //register
+                char * useRE = registerUser();
+
+                int op = 1;
+                if(send(sockfd,&op, sizeof(int), 0) < 0){
+                    perror("Error al enviar la opcion");
+                    exit(1);
+                }
+                strcpy(username, use);
+
+                break;
+            case 3:
+                printf("Saliendo del chat\n");
+                system("clear");
+                break;
+            default:
+                break;
+        }
+    }
+    
+}
 
 
 int main (int argc, char *argv[]) {
@@ -299,8 +304,8 @@ int main (int argc, char *argv[]) {
 
     createSocket(username, ip, port);
 
-    //begginMain();
-    vida();
+    begginMain();
+    //vida();
 
     pthread_mutex_destroy(&mutex);
 
